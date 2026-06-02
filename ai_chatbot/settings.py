@@ -106,3 +106,10 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+SERPAPI_API_KEY = os.getenv('SERPAPI_API_KEY')
+
+# SMTP settings for emailing PDF reports (placeholder credentials)
+EMAIL_SMTP_HOST = os.getenv('EMAIL_SMTP_HOST', 'smtp.gmail.com')
+EMAIL_SMTP_PORT = int(os.getenv('EMAIL_SMTP_PORT', 587))
+EMAIL_SMTP_USER = os.getenv('EMAIL_SMTP_USER', 'your-email@gmail.com')
+EMAIL_SMTP_PASSWORD = os.getenv('EMAIL_SMTP_PASSWORD', 'your-app-password')
