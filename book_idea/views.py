@@ -55,7 +55,7 @@ class BookIdeaCheckAPIView(APIView):
             )
 
             # Stage 4 – Anti-hallucination validation
-            validated_json = validate_briefing(stage_3_json, stage_2_data)
+            validated_json = validate_briefing(stage_3_json, stage_2_data, author_brief)
 
             # Persist to DB
             IdeaSubmission.objects.create(

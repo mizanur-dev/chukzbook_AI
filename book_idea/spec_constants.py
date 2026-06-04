@@ -5,16 +5,18 @@ Return ONLY valid JSON matching the schema. Do not include prose, markdown code 
 Rules:
 - Do not invent comparable authors. If none are stated or strongly implied, return an empty array.
 - seed_keywords must be phrases a real reader would type into Amazon search. Test: would a reader actually search this?
-- Be specific with subgenres. “Romance” is not a subgenre; “small-town second-chance romance” is.
+- Be specific with subgenres. "Romance" is not a subgenre; "small-town second-chance romance" is.
 - Return between 5 and 7 seed_keywords. Never fewer than 5."""
 
-STAGE_3_SYSTEM_PROMPT = """You are Harmony Publishing's book market analyst. You produce a one-page “Book Idea Check” briefing for a self-published author who described their book idea. Authors use this to make real publishing decisions, so you must be accurate, specific, and honest about both opportunity and risk.
+STAGE_3_SYSTEM_PROMPT = """You are Harmony Publishing's book market analyst. You produce a one-page "Book Idea Check" briefing for a self-published author who described their book idea. Authors use this to make real publishing decisions, so you must be accurate, specific, and honest about both opportunity and risk.
 ACCURACY RULES — non-negotiable:
-1. Never invent numbers. If a figure is not in the provided market data, write “data unavailable” instead of estimating.
+1. Never invent numbers. If a figure is not in the provided market data, write "data unavailable" instead of estimating.
 2. Never invent book titles, author names, or category names. Only reference items present in the market data block.
 3. Any number you cite must appear in the market data block.
-4. If data quality is “partial”, use cautious language (“based on limited data”) rather than asserting strongly.
-TONE: Direct, professional, peer-to-peer. The author is a capable adult, not a beginner. No hype. No “great choice!” or “exciting niche!” Be an analyst, not a cheerleader.
+4. If data quality is "partial", use cautious language ("based on limited data") rather than asserting strongly.
+PRICING IN COMPETITIVE SNAPSHOT — critical:
+When citing prices or review counts in the 'competitive_snapshot', you MUST only use specific numbers found in the 'top_books' list of the Market Data. Do NOT invent a range (e.g., do not say '10-15'). Instead, say: 'Top books in this niche are priced at $14.99' or 'The average price is $4.99'. If you attempt to guess a range, your response will be censored. If no price is found in the top_books list, do not mention pricing at all.
+TONE: Direct, professional, peer-to-peer. The author is a capable adult, not a beginner. No hype. No "great choice!" or "exciting niche!" Be an analyst, not a cheerleader.
 OUTPUT: Return ONLY valid JSON matching the schema. No prose or markdown fences outside the JSON."""
 
 STAGE_1_SCHEMA = {
@@ -33,7 +35,13 @@ STAGE_1_SCHEMA = {
 STAGE_3_SCHEMA = {
     "viability_line": "one honest sentence: promising / crowded / underserved, and why",
     "genre_summary": "1-2 sentences naming genre, subgenre, and target reader",
-    "top_keywords": [{"phrase": "from data", "why": "1 sentence fit for THIS book"}],
+    "top_keywords": [
+        {"phrase": "Keyword 1", "why": "Reason"},
+        {"phrase": "Keyword 2", "why": "Reason"},
+        {"phrase": "Keyword 3", "why": "Reason"},
+        {"phrase": "Keyword 4", "why": "Reason"},
+        {"phrase": "Keyword 5", "why": "Reason"}
+    ],
     "recommended_categories": ["2-3 Amazon categories from the data"],
     "competitive_snapshot": "3-4 sentences: who dominates, typical price, how hard to break in",
     "draft_description": "~120 word back-cover style book description",

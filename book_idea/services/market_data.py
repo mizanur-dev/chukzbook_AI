@@ -31,7 +31,7 @@ _MAX_KEYWORDS = 5
 _MAX_BOOKS_PER_KEYWORD = 10
 _CACHE_TIMEOUT = 86_400  # 24 hours in seconds
 _THREAD_WORKERS = 5
-_SERPAPI_TIMEOUT = 30  # seconds per query
+_SERPAPI_TIMEOUT = 60  # seconds per query (generous to avoid false timeouts)
 
 
 # ---------------------------------------------------------------------------
@@ -44,9 +44,51 @@ def _cache_key(keyword: str) -> str:
     return f"amz:{keyword.lower().strip()}"
 
 
+def _extract_price(item: dict) -> str | None:
+    """
+    Aggressively find a price string containing "$" from every known
+    SerpApi field/shape.  Returns e.g. "$14.99" or None.
+    """
+    # Collect every candidate value from known fields + nested objects
+    candidates: list[Any] = []
+
+    for field in ("price", "raw_price", "current_price"):
+        raw = item.get(field)
+        if raw is None:
+            continue
+        if isinstance(raw, dict):
+            # e.g. {"raw": "$9.99", "current": 9.99, "value": 9.99}
+            for sub in ("raw", "current", "value"):
+                if raw.get(sub) is not None:
+                    candidates.append(raw[sub])
+        else:
+            candidates.append(raw)
+
+    # Nested price_info -> raw  (seen in some SerpApi responses)
+    price_info = item.get("price_info")
+    if isinstance(price_info, dict):
+        for sub in ("raw", "current", "value"):
+            if price_info.get(sub) is not None:
+                candidates.append(price_info[sub])
+
+    # Return the first candidate that contains "$"
+    for val in candidates:
+        s = str(val).strip()
+        if "$" in s:
+            return s
+
+    # Fallback: first numeric-looking candidate, prefixed with "$"
+    for val in candidates:
+        s = str(val).strip()
+        if s and (s[0].isdigit() or s[0] == "."):
+            return f"${s}"
+
+    return None
+
+
 def _extract_book(item: dict) -> dict[str, Any] | None:
     """
-    Pull the fields we care about from a single SerpApi Amazon organic result.
+    Pull the fields we care about from a single SerpApi Amazon result.
 
     Returns ``None`` if the item is sponsored or doesn't look like a book.
     """
@@ -57,24 +99,25 @@ def _extract_book(item: dict) -> dict[str, Any] | None:
     if not title:
         return None
 
-    # Price: SerpApi nests it in several possible shapes
-    raw_price = item.get("price", {})
-    if isinstance(raw_price, dict):
-        price = raw_price.get("raw") or raw_price.get("current") or raw_price.get("value")
-    elif isinstance(raw_price, (int, float)):
-        price = f"${raw_price}"
-    elif isinstance(raw_price, str):
-        price = raw_price
+    price = _extract_price(item)
+
+    # Review count extraction: keep comma in string (e.g. "1,200")
+    reviews_val = item.get("reviews")
+    if reviews_val is None:
+        reviews_val = item.get("reviews_count")
+
+    # Ensure reviews is always a string (preserves commas like "1,200")
+    if reviews_val is not None:
+        reviews = str(reviews_val)
     else:
-        price = None
+        reviews = "0"
 
     return {
         "title": title,
         "asin": item.get("asin") or item.get("product_id"),
         "price": price,
         "rating": item.get("rating"),
-        "reviews_count": item.get("reviews", 0) if isinstance(item.get("reviews"), int)
-                         else item.get("reviews_count", 0),
+        "reviews": reviews,
         "category": item.get("category") or item.get("department"),
     }
 
@@ -89,23 +132,30 @@ def _query_serpapi(keyword: str) -> list[dict[str, Any]]:
     params = {
         "engine": "amazon",
         "amazon_domain": "amazon.com",
-        "search_term": keyword,
+        "k": keyword,  # Amazon's search query param (NOT search_term)
         "api_key": settings.SERPAPI_API_KEY,
     }
 
     search = GoogleSearch(params)
-    results = search.get_dict()
+    raw = search.get_dict()
 
-    organic = results.get("organic_results", [])
+    # Try result keys in priority order – use the first with >=1 item
+    items: list[dict] = []
+    for key in ("shopping_results", "organic_results", "amazon_results", "search_results"):
+        candidate = raw.get(key, [])
+        if candidate:
+            items = candidate
+            break
 
     books: list[dict[str, Any]] = []
-    for item in organic:
+    for item in items:
         if len(books) >= _MAX_BOOKS_PER_KEYWORD:
             break
         book = _extract_book(item)
         if book is not None:
             books.append(book)
 
+    logger.info("Stage 2 keyword '%s' returned %d books", keyword, len(books))
     return books
 
 
