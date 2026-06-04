@@ -1,6 +1,8 @@
 django
 djangorestframework
 langchain
+langchain-anthropic
+langchain-core
 langchain-deepseek
 langchain-community
 python-dotenv

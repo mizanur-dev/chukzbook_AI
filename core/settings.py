@@ -26,7 +26,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'chatbot',
+    'book_idea',
 ]
 
 MIDDLEWARE = [
@@ -39,7 +39,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'ai_chatbot.urls'
+ROOT_URLCONF = 'core.urls'
 
 TEMPLATES = [
     {
@@ -57,8 +57,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'ai_chatbot.wsgi.application'
-ASGI_APPLICATION = 'ai_chatbot.asgi.application'
+WSGI_APPLICATION = 'core.wsgi.application'
+ASGI_APPLICATION = 'core.asgi.application'
 
 
 
@@ -106,10 +106,17 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 SERPAPI_API_KEY = os.getenv('SERPAPI_API_KEY')
 
-# SMTP settings for emailing PDF reports (placeholder credentials)
-EMAIL_SMTP_HOST = os.getenv('EMAIL_SMTP_HOST', 'smtp.gmail.com')
-EMAIL_SMTP_PORT = int(os.getenv('EMAIL_SMTP_PORT', 587))
-EMAIL_SMTP_USER = os.getenv('EMAIL_SMTP_USER', 'your-email@gmail.com')
-EMAIL_SMTP_PASSWORD = os.getenv('EMAIL_SMTP_PASSWORD', 'your-app-password')
+# Email backend (used by django.core.mail.EmailMessage)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_SMTP_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_SMTP_PORT', 587))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_SMTP_USER', 'your-email@gmail.com')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_SMTP_PASSWORD', 'your-app-password')
+
+# Legacy aliases used by notifications.py for from_email
+EMAIL_SMTP_USER = EMAIL_HOST_USER
+EMAIL_SMTP_PASSWORD = EMAIL_HOST_PASSWORD
