@@ -13,6 +13,7 @@ Key design decisions:
     via data_quality="partial".
 """
 
+import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Any
@@ -40,8 +41,10 @@ _SERPAPI_TIMEOUT = 60  # seconds per query (generous to avoid false timeouts)
 
 
 def _cache_key(keyword: str) -> str:
-    """Deterministic cache key from a keyword phrase."""
-    return f"amz:{keyword.lower().strip()}"
+    """Deterministic, cache-safe key (MD5) — avoids spaces/unicode warnings."""
+    normalized = keyword.lower().strip()
+    digest = hashlib.md5(normalized.encode("utf-8")).hexdigest()
+    return f"amz_{digest}"
 
 
 def _extract_price(item: dict) -> str | None:
