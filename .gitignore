@@ -118,3 +118,4 @@ celerybeat-schedule.*
 dmypy.json
 postman/
 postman_collection.json
+uv.lock
