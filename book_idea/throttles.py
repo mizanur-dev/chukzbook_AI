@@ -1,10 +1,17 @@
 from rest_framework.throttling import SimpleRateThrottle
 
+# Exact user-facing message shown when either throttle blocks a request.
+THROTTLED_MESSAGE = (
+    "You've used your free check for today. "
+    "Talk to a specialist for a deeper analysis \u2192"
+)
+
 
 class EmailRateThrottle(SimpleRateThrottle):
     """1 request per email per day."""
     scope = "email"
     rate = "1/day"
+    message = THROTTLED_MESSAGE
 
     def get_cache_key(self, request, view):
         email = request.data.get("email")
@@ -20,6 +27,7 @@ class IPRateThrottle(SimpleRateThrottle):
     """4 requests per IP per day (~1 per 6 hours)."""
     scope = "ip"
     rate = "4/day"
+    message = THROTTLED_MESSAGE
 
     def get_cache_key(self, request, view):
         ident = self.get_ident(request)

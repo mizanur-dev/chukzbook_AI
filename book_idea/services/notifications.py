@@ -157,11 +157,12 @@ def _build_email_body(first_name: str) -> str:
 def send_briefing_email_background(email: str, name: str, pdf_bytes: bytes) -> None:
     """Send the briefing PDF via Django's email backend (background-thread safe)."""
     first_name = name.split()[0] if name else "there"
+    sender = settings.EMAIL_SMTP_USER
     try:
         msg = EmailMessage(
             subject="Your Book Idea Check from Harmony Publishing",
             body=_build_email_body(first_name),
-            from_email=settings.EMAIL_SMTP_USER,
+            from_email=sender,
             to=[email],
         )
         msg.attach(
@@ -170,6 +171,6 @@ def send_briefing_email_background(email: str, name: str, pdf_bytes: bytes) -> N
             "application/pdf",
         )
         msg.send()
-        logger.info("Briefing email sent to %s", email)
+        logger.info("Briefing email sent to %s via %s", email, sender)
     except Exception:
         logger.exception("Failed to send briefing email to %s", email)

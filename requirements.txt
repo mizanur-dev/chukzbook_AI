@@ -9,3 +9,4 @@ python-dotenv
 uvicorn
 fpdf2
 google-search-results
+django-cors-headers

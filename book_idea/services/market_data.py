@@ -264,11 +264,12 @@ def fetch_amazon_data(stage_1_json: dict[str, Any]) -> dict[str, Any]:
                     categories_seen.add(cat)
 
     data_quality = "partial" if any_timeout else "full"
+    total_books = sum(len(kr["top_books"]) for kr in keyword_results)
 
     logger.info(
-        "Stage 2 complete – %d keywords, %d total books, quality=%s",
+        "Stage 2 complete - %d keywords, %d total books, quality=%s",
         len(keyword_results),
-        sum(len(kr["top_books"]) for kr in keyword_results),
+        total_books,
         data_quality,
     )
 

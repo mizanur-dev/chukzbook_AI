@@ -9,7 +9,7 @@ The **AI Book Idea Check** is a robust, Django-based backend application designe
 - **Framework**: Django & Django REST Framework (DRF)
 - **AI Orchestration**: LangChain (`langchain-core`, `langchain-deepseek`, `langchain-anthropic`)
 - **Primary LLM**: DeepSeek (`deepseek-chat`)
-- **Fallback LLM**: Anthropic Claude (`claude-3-haiku-20240307`, `claude-3-sonnet-20240229`)
+- **Fallback LLM**: Anthropic Claude (`claude-haiku-4-5-20251001`, `claude-sonnet-4-6`)
 - **Market Data Engine**: SerpApi (Amazon Search Engine)
 - **PDF Generation**: `fpdf2` (with automated Unicode-to-ASCII sanitization)
 - **Task Management**: Python native `threading.Thread` and `concurrent.futures.ThreadPoolExecutor`

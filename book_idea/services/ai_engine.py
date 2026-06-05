@@ -20,6 +20,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_deepseek import ChatDeepSeek
 
 from book_idea.spec_constants import (
+    GRACEFUL_FALLBACK,
     STAGE_1_SCHEMA,
     STAGE_1_SYSTEM_PROMPT,
     STAGE_3_SCHEMA,
@@ -99,74 +100,111 @@ def llm_call_with_fallback(
 
     # -- Build LLM instances ------------------------------------------------
 
-    deepseek_api_key = settings.DEEPSEEK_API_KEY
+    deepseek_api_key = getattr(settings, "DEEPSEEK_API_KEY", None)
+    primary_llm = None
+    retry_llm = None
 
-    primary_llm = ChatDeepSeek(
-        model="deepseek-chat",
-        api_key=deepseek_api_key,
-        temperature=primary_temperature,
-        max_tokens=primary_max_tokens,
-    )
-
-    retry_llm = ChatDeepSeek(
-        model="deepseek-chat",
-        api_key=deepseek_api_key,
-        temperature=0.1,
-        max_tokens=primary_max_tokens,
-    )
+    if not deepseek_api_key:
+        logger.warning(
+            "DeepSeek API key is missing; skipping directly to Claude fallback.",
+        )
+    else:
+        try:
+            primary_llm = ChatDeepSeek(
+                model="deepseek-chat",
+                api_key=deepseek_api_key,
+                temperature=primary_temperature,
+                max_tokens=primary_max_tokens,
+            )
+            retry_llm = ChatDeepSeek(
+                model="deepseek-chat",
+                api_key=deepseek_api_key,
+                temperature=0.1,
+                max_tokens=primary_max_tokens,
+            )
+        except Exception as exc:
+            logger.error("DeepSeek initialization failed: %s", exc)
 
     # Choose Claude model based on pipeline stage
     claude_model = (
-        "claude-3-haiku-20240307" if stage == 1
-        else "claude-3-sonnet-20240229"
+        "claude-haiku-4-5-20251001" if stage == 1
+        else "claude-sonnet-4-6"
     )
     anthropic_api_key = getattr(settings, "ANTHROPIC_API_KEY", None)
+    fallback_llm = None
 
-    fallback_llm = ChatAnthropic(
-        model=claude_model,
-        api_key=anthropic_api_key or "dummy",
-        temperature=0.2,
-        max_tokens=primary_max_tokens,
-    )
+    try:
+        if not anthropic_api_key:
+            raise ValueError("Anthropic Key Missing")
+        fallback_llm = ChatAnthropic(
+            model=claude_model,
+            api_key=anthropic_api_key,
+            temperature=0.2,
+            max_tokens=primary_max_tokens,
+        )
+    except Exception as exc:
+        logger.error("Claude initialization failed: %s", exc)
 
     # -- Build chains -------------------------------------------------------
 
     parser = _CleanJsonOutputParser()
 
-    primary_chain = prompt_template | primary_llm | parser
-    retry_chain = prompt_template | retry_llm | parser
-    fallback_chain = prompt_template | fallback_llm | parser
+    primary_chain = prompt_template | primary_llm | parser if primary_llm else None
+    retry_chain = prompt_template | retry_llm | parser if retry_llm else None
+    fallback_chain = prompt_template | fallback_llm | parser if fallback_llm else None
 
     # -- Invoke with manual cascade to track which provider succeeded -------
 
-    provider = "deepseek"
     last_exc: Exception | None = None
 
-    for label, chain in [
-        ("deepseek", primary_chain),
-        ("deepseek", retry_chain),
-        ("claude", fallback_chain),
-    ]:
+    # Attempt 1: DeepSeek primary
+    if primary_chain is not None:
+        logger.info("Stage %d: invoking DeepSeek (attempt 1)", stage)
         try:
-            result = chain.invoke(prompt_kwargs)
-            provider = label
-            logger.info(
-                "Stage %d succeeded via %s",
-                stage,
-                provider,
-            )
-            return result, provider
+            result = primary_chain.invoke(prompt_kwargs)
+            logger.info("Stage %d answered by provider=deepseek", stage)
+            return result, "deepseek"
         except Exception as exc:
             last_exc = exc
             logger.warning(
-                "Stage %d – %s chain failed: %s",
-                stage,
-                label,
-                exc,
+                "Stage %d deepseek attempt 1 failed: %s", stage, exc,
             )
 
-    # All three failed – re-raise the last exception
-    raise last_exc  # type: ignore[misc]
+    # Attempt 2: DeepSeek retry at lower temperature
+    if retry_chain is not None:
+        logger.info("Stage %d: invoking DeepSeek (attempt 2, low temp)", stage)
+        try:
+            result = retry_chain.invoke(prompt_kwargs)
+            logger.info("Stage %d answered by provider=deepseek", stage)
+            return result, "deepseek"
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                "Stage %d deepseek attempt 2 failed: %s", stage, exc,
+            )
+
+    # Attempt 3: Claude fallback
+    if fallback_chain is not None:
+        logger.info(
+            "Stage %d: invoking Claude fallback (%s)", stage, claude_model,
+        )
+        try:
+            result = fallback_chain.invoke(prompt_kwargs)
+            logger.info("Stage %d answered by provider=claude", stage)
+            return result, "claude"
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                "Stage %d claude fallback failed: %s", stage, exc,
+            )
+
+    # All providers failed or none were initialised.
+    err_msg = last_exc if last_exc else "No LLM chains were initialized."
+    logger.error(
+        "Stage %d answered by provider=failed (%s); returning GRACEFUL_FALLBACK",
+        stage, err_msg,
+    )
+    return GRACEFUL_FALLBACK, "fallback"
 
 
 # ---------------------------------------------------------------------------

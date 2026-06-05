@@ -24,6 +24,9 @@ _DRAFT_DESC_MAX_WORDS = 200
 _PARTIAL_BANNER = "⚠ Based on limited market data for this niche."
 _UNAVAILABLE_TAG = "[data unavailable]"
 _CENSORED_SENTENCE_FALLBACK = "Market pricing and competition data for this specific niche is currently limited."
+_PARTIAL_VIABILITY_PREFIX = "live market data unavailable right now; "
+_LOW_CONFIDENCE_BANNER = "Show low-confidence banner; offer specialist chat for a manual review. "
+_LOW_CONFIDENCE_THRESHOLD = 0.5
 
 # ---------------------------------------------------------------------------
 # Market-number regex
@@ -241,6 +244,41 @@ def _clean_all_strings(obj: Any) -> Any:
     return obj
 
 
+def _count_censored_fields(
+    obj: Any,
+    valid_numbers: set[str],
+    author_numbers: set[str],
+) -> tuple[int, int]:
+    """
+    Count (censored_string_fields, total_string_fields) without mutating obj.
+
+    A string field counts as censored if, after running the same
+    hallucinated-number scrub used by Stage 4, it contains the
+    ``[data unavailable]`` tag.
+    """
+    censored = 0
+    total = 0
+
+    if isinstance(obj, dict):
+        for v in obj.values():
+            c, t = _count_censored_fields(v, valid_numbers, author_numbers)
+            censored += c
+            total += t
+    elif isinstance(obj, list):
+        for item in obj:
+            c, t = _count_censored_fields(item, valid_numbers, author_numbers)
+            censored += c
+            total += t
+    elif isinstance(obj, str):
+        if obj.strip():
+            total = 1
+            scrubbed = _scrub_hallucinated_numbers(obj, valid_numbers, author_numbers)
+            if _UNAVAILABLE_TAG in scrubbed:
+                censored = 1
+
+    return censored, total
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -291,6 +329,18 @@ def validate_briefing(
         len(author_numbers),
     )
 
+    # -- 1b. Low-confidence pre-scan ----------------------------------------
+    # Count how many string fields *would* be censored before we mutate
+    # the briefing. This is used to decide whether to show the
+    # low-confidence banner on genre_summary.
+    censored_count, total_string_fields = _count_censored_fields(
+        briefing, valid_numbers, author_numbers,
+    )
+    censored_ratio = (
+        censored_count / total_string_fields if total_string_fields else 0.0
+    )
+    low_confidence = censored_ratio > _LOW_CONFIDENCE_THRESHOLD
+
     # -- 2. Anti-hallucination: scrub fabricated numbers ---------------------
     briefing = _scrub_dict_values(briefing, valid_numbers, author_numbers)
 
@@ -325,17 +375,29 @@ def validate_briefing(
 
     # -- 5. Partial-data banner ---------------------------------------------
     data_quality = stage_2_market_data.get("data_quality", "full")
+    market_is_empty = not stage_2_market_data.get("keywords")
 
-    if data_quality == "partial":
-        # Prepend banner to the viability_line (the most prominent field)
+    if data_quality == "partial" or market_is_empty:
+        # Prepend the partial-data prefix to the viability_line
         viability = briefing.get("viability_line", "")
-        briefing["viability_line"] = f"{_PARTIAL_BANNER} {viability}"
+        briefing["viability_line"] = f"{_PARTIAL_VIABILITY_PREFIX}{viability}"
 
-        # Also prepend to competitive_snapshot for extra visibility
+        # Also prepend the legacy banner to competitive_snapshot for extra visibility
         snapshot = briefing.get("competitive_snapshot", "")
         briefing["competitive_snapshot"] = f"{_PARTIAL_BANNER} {snapshot}"
 
         logger.info("Partial-data banners prepended to briefing")
+
+    # -- 5b. Low-confidence banner ------------------------------------------
+    if low_confidence:
+        genre_summary = briefing.get("genre_summary", "")
+        briefing["genre_summary"] = f"{_LOW_CONFIDENCE_BANNER}{genre_summary}"
+        logger.info(
+            "Low-confidence banner added: %d/%d string fields censored (%.0f%%)",
+            censored_count,
+            total_string_fields,
+            censored_ratio * 100,
+        )
 
     # -- 6. Final safety sweep: ensure no "[data unavailable]" exists anywhere in briefing strings
     briefing = _clean_all_strings(briefing)

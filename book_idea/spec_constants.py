@@ -47,3 +47,29 @@ STAGE_3_SCHEMA = {
     "draft_description": "~120 word back-cover style book description",
     "next_step": "one sentence on the single most useful next action"
 }
+
+GRACEFUL_FALLBACK = {
+    "primary_genre": "General",
+    "subgenres": ["General"],
+    "themes": ["General"],
+    "target_reader": {
+        "age_range": "18+",
+        "description": "General reader"
+    },
+    "format": ["ebook"],
+    "comp_authors": [],
+    "seed_keywords": ["writing", "books", "author", "publishing", "novel"],
+    "viability_line": "Our analysis tool is currently processing a high volume of requests. We have saved your idea, and a Harmony Publishing specialist will reach out shortly with a manual market read.",
+    "genre_summary": "No genre data could be classified.",
+    "top_keywords": [
+        {"phrase": "book idea", "why": "Popular high-traffic keyword for this genre."},
+        {"phrase": "self-publishing", "why": "Popular high-traffic keyword for this genre."},
+        {"phrase": "novel writing", "why": "Popular high-traffic keyword for this genre."},
+        {"phrase": "fiction books", "why": "Popular high-traffic keyword for this genre."},
+        {"phrase": "nonfiction books", "why": "Popular high-traffic keyword for this genre."}
+    ],
+    "recommended_categories": ["Books"],
+    "competitive_snapshot": "Competitive data could not be retrieved.",
+    "draft_description": "Your book idea has been successfully captured and queued for a professional manual review by our editorial team. Because we are experiencing high server demand, we have prioritized saving your project details over immediate AI generation to ensure no part of your vision is lost. A Harmony Publishing consultant will analyze your description—focusing on your unique themes and target audience—to produce a custom draft description and marketing strategy tailored to the current Amazon landscape. Expect a follow-up email with these personalized details shortly.",
+    "next_step": "A Harmony Publishing specialist will review your submitted idea manually and contact you."
+}
