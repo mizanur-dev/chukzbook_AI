@@ -9,12 +9,11 @@ from fpdf import FPDF
 logger = logging.getLogger(__name__)
 
 
-# Harmony Publishing brand palette
-_BRAND_PRIMARY = (28, 47, 92)      # deep navy
-_BRAND_ACCENT = (200, 161, 80)     # warm gold
-_BODY_TEXT = (45, 45, 45)          # near-black
-_MUTED_TEXT = (110, 110, 110)      # gray
-_RULE_COLOR = (220, 220, 220)      # light gray rule
+_BRAND_PRIMARY = (28, 47, 92) 
+_BRAND_ACCENT = (200, 161, 80)   
+_BODY_TEXT = (45, 45, 45)         
+_MUTED_TEXT = (110, 110, 110)     
+_RULE_COLOR = (220, 220, 220)   
 
 _UNICODE_REPLACEMENTS = {
     "\u2018": "'", "\u2019": "'",
@@ -71,7 +70,6 @@ def _section_heading(pdf: FPDF, title: str) -> None:
     pdf.set_font("Helvetica", "B", 13)
     pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
 
-    # gold accent bar under the heading
     y = pdf.get_y()
     pdf.set_fill_color(*_BRAND_ACCENT)
     pdf.rect(pdf.l_margin, y, 18, 1.2, style="F")

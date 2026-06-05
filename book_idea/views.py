@@ -42,7 +42,6 @@ from .throttles import THROTTLED_MESSAGE, EmailRateThrottle, IPRateThrottle
 
 logger = logging.getLogger(__name__)
 
-# --- User-facing copy (Spec Section 8) --------------------------------------
 
 _BUSY_VIABILITY_LINE = (
     "Our analysis tool is busy right now. We've saved your idea and a "
@@ -103,7 +102,6 @@ class BookIdeaCheckAPIView(APIView):
         start_time = time.time()
 
         try:
-            # -- Stage 1: classify the author brief ------------------------
             t1_start = time.time()
             try:
                 stage_1_result = run_stage_1_classify(author_brief)
@@ -123,7 +121,6 @@ class BookIdeaCheckAPIView(APIView):
                 provider, time.time() - t1_start,
             )
 
-            # -- Stage 2: Amazon market data (continues on SerpApi failure)
             t2_start = time.time()
             stage_2_data = fetch_amazon_data(stage_1_json)
             logger.info(
@@ -132,7 +129,6 @@ class BookIdeaCheckAPIView(APIView):
                 time.time() - t2_start,
             )
 
-            # -- Stage 3: analyst synthesis --------------------------------
             t3_start = time.time()
             stage_3_json, provider = run_stage_3_synthesize(
                 author_brief, stage_1_json, stage_2_data,
@@ -142,9 +138,6 @@ class BookIdeaCheckAPIView(APIView):
                 provider, time.time() - t3_start,
             )
 
-            # If the LLM cascade exhausted every provider, ``ai_engine``
-            # returns ``GRACEFUL_FALLBACK`` with provider=="fallback".
-            # Surface the Section 8 "tool is busy" copy in that case.
             if provider == "fallback":
                 logger.warning(
                     "All LLM providers failed; returning busy fallback for %s",
@@ -160,14 +153,12 @@ class BookIdeaCheckAPIView(APIView):
                 )
                 return _busy_fallback_response()
 
-            # -- Stage 4: anti-hallucination validation --------------------
             t4_start = time.time()
             validated_json = validate_briefing(
                 stage_3_json, stage_2_data, author_brief,
             )
             logger.info("Stage 4 OK in %.1fs", time.time() - t4_start)
 
-            # -- Persist the lead -----------------------------------------
             IdeaSubmission.objects.create(
                 name=name,
                 email=email,
@@ -177,7 +168,6 @@ class BookIdeaCheckAPIView(APIView):
                 llm_provider_used=provider,
             )
 
-            # -- Background PDF + email -----------------------------------
             def run_bg_tasks() -> None:
                 """Render the briefing PDF and email it to the author."""
                 try:
@@ -195,8 +185,6 @@ class BookIdeaCheckAPIView(APIView):
             return Response(validated_json, status=status.HTTP_200_OK)
 
         except Exception:
-            # Total pipeline failure: save the lead and return the
-            # graceful "tool is busy" fallback (Section 8).
             logger.exception("Pipeline failed for %s", email)
             IdeaSubmission.objects.create(
                 name=name,

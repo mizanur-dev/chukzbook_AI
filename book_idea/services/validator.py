@@ -14,9 +14,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 _TARGET_TOP_KEYWORDS = 5
 _DRAFT_DESC_MIN_WORDS = 80
@@ -28,37 +25,21 @@ _PARTIAL_VIABILITY_PREFIX = "live market data unavailable right now; "
 _LOW_CONFIDENCE_BANNER = "Show low-confidence banner; offer specialist chat for a manual review. "
 _LOW_CONFIDENCE_THRESHOLD = 0.5
 
-# ---------------------------------------------------------------------------
-# Market-number regex
-#
-# We target ONLY patterns that look like market metrics:
-#   • Dollar amounts          : $4.99, $10, $25.00
-#   • Comma-formatted numbers : 1,200  12,345,678
-#   • Large plain integers    : 100, 2500  (i.e. ≥ 100)
-#   • Decimal ratings/scores  : 4.5, 3.8, 4.85
-#
-# We intentionally EXCLUDE:
-#   • Small integers < 100 (ages, chapter counts, "top 10", etc.)
-#   • Bare punctuation, commas in prose, hyphens in ranges
-# ---------------------------------------------------------------------------
 
 _MARKET_NUMBER_RE = re.compile(
     r"""
-    (?P<dollar>  \$\d+(?:,\d{3})*(?:\.\d{1,2})? )          # $4.99, $10, $1,200
+    (?P<dollar>  \$\d+(?:,\d{3})*(?:\.\d{1,2})? )         
     |
-    (?P<comma>   \b[1-9]\d{0,2}(?:,\d{3})+\b )             # 1,200  12,345
+    (?P<comma>   \b[1-9]\d{0,2}(?:,\d{3})+\b )           
     |
-    (?P<large>   \b[1-9]\d{2,}\b )                          # 100 .. 999999+
+    (?P<large>   \b[1-9]\d{2,}\b )                        
     |
-    (?P<decimal> \b\d{1,2}\.\d{1,2}\b )                     # 4.5, 3.85 (ratings)
+    (?P<decimal> \b\d{1,2}\.\d{1,2}\b )                     
     """,
     re.VERBOSE,
 )
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _flatten_to_strings(obj: Any) -> list[str]:
@@ -99,8 +80,6 @@ def _collect_numbers_from_market_data(market_data: dict[str, Any]) -> set[str]:
             numbers.add(raw)
             numbers.add(normalised)
 
-        # Also grab plain numbers from numeric types that were stringified
-        # (e.g. the integer 4500 → "4500")
         try:
             val = float(text)
             numbers.add(text)
@@ -127,18 +106,15 @@ def _scrub_hallucinated_numbers(
     """
 
     def _replacer(m: re.Match) -> str:
-        raw = m.group()                       # e.g. "$4.99", "1,200", "4500", "4.5"
+        raw = m.group()                      
         normalised = raw.replace(",", "").lstrip("$")
 
-        # --- Whitelist 1: author provided this number ---
         if raw in author_numbers or normalised in author_numbers:
             return raw
 
-        # --- Whitelist 2: number exists in the market data ---
         if raw in valid_numbers or normalised in valid_numbers:
             return raw
 
-        # --- Not validated → replace ---
         return "[data unavailable]"
 
     return _MARKET_NUMBER_RE.sub(_replacer, text)
@@ -173,7 +149,6 @@ def _clean_censored_sentences(text: str) -> str:
     if _UNAVAILABLE_TAG not in text:
         return text
 
-    # Split the text into sentences using a regex that captures sentences ending with .!? or end of string
     sentence_pattern = re.compile(r"[^.!?]+(?:[.!?]+|\Z)")
     raw_parts = [m.group().strip() for m in sentence_pattern.finditer(text) if m.group().strip()]
     
@@ -279,9 +254,6 @@ def _count_censored_fields(
     return censored, total
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def validate_briefing(
@@ -316,10 +288,8 @@ def validate_briefing(
     dict
         The validated (and possibly modified) briefing JSON.
     """
-    # Work on a deep copy so the caller's original is untouched
     briefing = copy.deepcopy(stage_3_json)
 
-    # -- 1. Collect trusted number sets -------------------------------------
     valid_numbers = _collect_numbers_from_market_data(stage_2_market_data)
     author_numbers = _collect_author_numbers(author_brief_text)
 
@@ -329,10 +299,6 @@ def validate_briefing(
         len(author_numbers),
     )
 
-    # -- 1b. Low-confidence pre-scan ----------------------------------------
-    # Count how many string fields *would* be censored before we mutate
-    # the briefing. This is used to decide whether to show the
-    # low-confidence banner on genre_summary.
     censored_count, total_string_fields = _count_censored_fields(
         briefing, valid_numbers, author_numbers,
     )
@@ -341,10 +307,8 @@ def validate_briefing(
     )
     low_confidence = censored_ratio > _LOW_CONFIDENCE_THRESHOLD
 
-    # -- 2. Anti-hallucination: scrub fabricated numbers ---------------------
     briefing = _scrub_dict_values(briefing, valid_numbers, author_numbers)
 
-    # -- 3. Ensure exactly 5 top_keywords -----------------------------------
     top_keywords = briefing.get("top_keywords", [])
     if not isinstance(top_keywords, list):
         top_keywords = []
@@ -356,7 +320,6 @@ def validate_briefing(
         len(briefing["top_keywords"]),
     )
 
-    # -- 4. Check draft_description word count ------------------------------
     draft_desc = briefing.get("draft_description", "")
     word_count = len(draft_desc.split())
 
@@ -373,22 +336,18 @@ def validate_briefing(
             _DRAFT_DESC_MAX_WORDS,
         )
 
-    # -- 5. Partial-data banner ---------------------------------------------
     data_quality = stage_2_market_data.get("data_quality", "full")
     market_is_empty = not stage_2_market_data.get("keywords")
 
     if data_quality == "partial" or market_is_empty:
-        # Prepend the partial-data prefix to the viability_line
         viability = briefing.get("viability_line", "")
         briefing["viability_line"] = f"{_PARTIAL_VIABILITY_PREFIX}{viability}"
 
-        # Also prepend the legacy banner to competitive_snapshot for extra visibility
         snapshot = briefing.get("competitive_snapshot", "")
         briefing["competitive_snapshot"] = f"{_PARTIAL_BANNER} {snapshot}"
 
         logger.info("Partial-data banners prepended to briefing")
 
-    # -- 5b. Low-confidence banner ------------------------------------------
     if low_confidence:
         genre_summary = briefing.get("genre_summary", "")
         briefing["genre_summary"] = f"{_LOW_CONFIDENCE_BANNER}{genre_summary}"
@@ -399,7 +358,6 @@ def validate_briefing(
             censored_ratio * 100,
         )
 
-    # -- 6. Final safety sweep: ensure no "[data unavailable]" exists anywhere in briefing strings
     briefing = _clean_all_strings(briefing)
 
     return briefing

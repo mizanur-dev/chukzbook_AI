@@ -24,20 +24,14 @@ from serpapi import GoogleSearch
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 _MAX_KEYWORDS = 5
 _MAX_BOOKS_PER_KEYWORD = 10
-_CACHE_TIMEOUT = 86_400  # 24 hours in seconds
+_CACHE_TIMEOUT = 86_400 
 _THREAD_WORKERS = 5
-_SERPAPI_TIMEOUT = 60  # seconds per query (generous to avoid false timeouts)
+_SERPAPI_TIMEOUT = 60
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _cache_key(keyword: str) -> str:
@@ -52,7 +46,6 @@ def _extract_price(item: dict) -> str | None:
     Aggressively find a price string containing "$" from every known
     SerpApi field/shape.  Returns e.g. "$14.99" or None.
     """
-    # Collect every candidate value from known fields + nested objects
     candidates: list[Any] = []
 
     for field in ("price", "raw_price", "current_price"):
@@ -60,27 +53,23 @@ def _extract_price(item: dict) -> str | None:
         if raw is None:
             continue
         if isinstance(raw, dict):
-            # e.g. {"raw": "$9.99", "current": 9.99, "value": 9.99}
             for sub in ("raw", "current", "value"):
                 if raw.get(sub) is not None:
                     candidates.append(raw[sub])
         else:
             candidates.append(raw)
 
-    # Nested price_info -> raw  (seen in some SerpApi responses)
     price_info = item.get("price_info")
     if isinstance(price_info, dict):
         for sub in ("raw", "current", "value"):
             if price_info.get(sub) is not None:
                 candidates.append(price_info[sub])
 
-    # Return the first candidate that contains "$"
     for val in candidates:
         s = str(val).strip()
         if "$" in s:
             return s
 
-    # Fallback: first numeric-looking candidate, prefixed with "$"
     for val in candidates:
         s = str(val).strip()
         if s and (s[0].isdigit() or s[0] == "."):
@@ -104,12 +93,10 @@ def _extract_book(item: dict) -> dict[str, Any] | None:
 
     price = _extract_price(item)
 
-    # Review count extraction: keep comma in string (e.g. "1,200")
     reviews_val = item.get("reviews")
     if reviews_val is None:
         reviews_val = item.get("reviews_count")
 
-    # Ensure reviews is always a string (preserves commas like "1,200")
     if reviews_val is not None:
         reviews = str(reviews_val)
     else:
@@ -135,14 +122,13 @@ def _query_serpapi(keyword: str) -> list[dict[str, Any]]:
     params = {
         "engine": "amazon",
         "amazon_domain": "amazon.com",
-        "k": keyword,  # Amazon's search query param (NOT search_term)
+        "k": keyword,
         "api_key": settings.SERPAPI_API_KEY,
     }
 
     search = GoogleSearch(params)
     raw = search.get_dict()
 
-    # Try result keys in priority order – use the first with >=1 item
     items: list[dict] = []
     for key in ("shopping_results", "organic_results", "amazon_results", "search_results"):
         candidate = raw.get(key, [])
@@ -189,9 +175,6 @@ def _fetch_keyword(keyword: str) -> tuple[str, list[dict[str, Any]], bool]:
         return keyword, [], True
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def fetch_amazon_data(stage_1_json: dict[str, Any]) -> dict[str, Any]:
@@ -218,7 +201,6 @@ def fetch_amazon_data(stage_1_json: dict[str, Any]) -> dict[str, Any]:
     """
     seed_keywords: list[str] = stage_1_json.get("seed_keywords", [])
 
-    # Cap at 5 keywords to control cost and latency
     keywords = seed_keywords[:_MAX_KEYWORDS]
 
     if not keywords:
@@ -229,7 +211,6 @@ def fetch_amazon_data(stage_1_json: dict[str, Any]) -> dict[str, Any]:
             "data_quality": "partial",
         }
 
-    # -- Fetch in parallel --------------------------------------------------
     any_timeout = False
     keyword_results: list[dict[str, Any]] = []
     categories_seen: set[str] = set()
@@ -257,7 +238,6 @@ def fetch_amazon_data(stage_1_json: dict[str, Any]) -> dict[str, Any]:
                 "top_books": books,
             })
 
-            # Collect unique categories
             for book in books:
                 cat = book.get("category")
                 if cat:

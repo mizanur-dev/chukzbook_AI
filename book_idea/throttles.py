@@ -1,6 +1,5 @@
 from rest_framework.throttling import SimpleRateThrottle
 
-# Exact user-facing message shown when either throttle blocks a request.
 THROTTLED_MESSAGE = (
     "You've used your free check for today. "
     "Talk to a specialist for a deeper analysis \u2192"

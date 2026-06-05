@@ -29,9 +29,7 @@ from book_idea.spec_constants import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+
 
 _MD_FENCE_RE = re.compile(
     r"```(?:json)?\s*\n?(.*?)\n?\s*```",
@@ -55,9 +53,6 @@ class _CleanJsonOutputParser(JsonOutputParser):
         return super().parse(cleaned)
 
 
-# ---------------------------------------------------------------------------
-# Fallback Helper
-# ---------------------------------------------------------------------------
 
 
 def llm_call_with_fallback(
@@ -98,7 +93,6 @@ def llm_call_with_fallback(
     if prompt_kwargs is None:
         prompt_kwargs = {}
 
-    # -- Build LLM instances ------------------------------------------------
 
     deepseek_api_key = getattr(settings, "DEEPSEEK_API_KEY", None)
     primary_llm = None
@@ -125,7 +119,6 @@ def llm_call_with_fallback(
         except Exception as exc:
             logger.error("DeepSeek initialization failed: %s", exc)
 
-    # Choose Claude model based on pipeline stage
     claude_model = (
         "claude-haiku-4-5-20251001" if stage == 1
         else "claude-sonnet-4-6"
@@ -145,7 +138,6 @@ def llm_call_with_fallback(
     except Exception as exc:
         logger.error("Claude initialization failed: %s", exc)
 
-    # -- Build chains -------------------------------------------------------
 
     parser = _CleanJsonOutputParser()
 
@@ -153,11 +145,9 @@ def llm_call_with_fallback(
     retry_chain = prompt_template | retry_llm | parser if retry_llm else None
     fallback_chain = prompt_template | fallback_llm | parser if fallback_llm else None
 
-    # -- Invoke with manual cascade to track which provider succeeded -------
 
     last_exc: Exception | None = None
 
-    # Attempt 1: DeepSeek primary
     if primary_chain is not None:
         logger.info("Stage %d: invoking DeepSeek (attempt 1)", stage)
         try:
@@ -170,7 +160,6 @@ def llm_call_with_fallback(
                 "Stage %d deepseek attempt 1 failed: %s", stage, exc,
             )
 
-    # Attempt 2: DeepSeek retry at lower temperature
     if retry_chain is not None:
         logger.info("Stage %d: invoking DeepSeek (attempt 2, low temp)", stage)
         try:
@@ -183,7 +172,6 @@ def llm_call_with_fallback(
                 "Stage %d deepseek attempt 2 failed: %s", stage, exc,
             )
 
-    # Attempt 3: Claude fallback
     if fallback_chain is not None:
         logger.info(
             "Stage %d: invoking Claude fallback (%s)", stage, claude_model,
@@ -198,7 +186,6 @@ def llm_call_with_fallback(
                 "Stage %d claude fallback failed: %s", stage, exc,
             )
 
-    # All providers failed or none were initialised.
     err_msg = last_exc if last_exc else "No LLM chains were initialized."
     logger.error(
         "Stage %d answered by provider=failed (%s); returning GRACEFUL_FALLBACK",
@@ -207,9 +194,6 @@ def llm_call_with_fallback(
     return GRACEFUL_FALLBACK, "fallback"
 
 
-# ---------------------------------------------------------------------------
-# Stage 1 – Classify the author brief
-# ---------------------------------------------------------------------------
 
 _STAGE_1_PROMPT = ChatPromptTemplate.from_messages([
     ("system", STAGE_1_SYSTEM_PROMPT),
@@ -262,9 +246,6 @@ def run_stage_1_classify(author_brief_text: str) -> tuple[dict[str, Any], str]:
     return result, provider
 
 
-# ---------------------------------------------------------------------------
-# Stage 3 – Synthesize the market briefing
-# ---------------------------------------------------------------------------
 
 _STAGE_3_PROMPT = ChatPromptTemplate.from_messages([
     ("system", STAGE_3_SYSTEM_PROMPT),
